@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Times Table & Quiz</title>
+  <title>Learn Multiplication</title>
   <style>
     body {
       margin: 0;
@@ -19,7 +19,8 @@
       font-size: 1rem;
       cursor: pointer;
     }
-    /* —— Times Table Grid Styles —— */
+
+    /* —— Grid Styles (Times Table & Skip-Counting) —— */
     .grid {
       display: grid;
       grid-template-columns: repeat(9, 1fr);
@@ -35,7 +36,7 @@
       border-radius: 6px;
       padding: 20px 0;
       text-align: center;
-      font-size: 1.2rem;
+      font-size: 1.1rem;
       touch-action: manipulation;
       user-select: none;
       transition: background 0.2s, transform 0.1s;
@@ -44,7 +45,8 @@
       background: #e0f7fa;
       transform: scale(0.98);
     }
-    /* —— Quiz Mode Styles —— */
+
+    /* —— Quiz Styles —— */
     #quiz {
       max-width: 400px;
       margin: 16px auto;
@@ -53,19 +55,64 @@
     #choices button {
       margin: 6px;
       padding: 8px 16px;
-      font-size: 1.2rem;
+      font-size: 1.1rem;
       cursor: pointer;
+    }
+
+    /* —— Flashcard Styles —— */
+    #cards {
+      display: none;
+      text-align: center;
+      margin-top: 24px;
+    }
+    #card {
+      width: 200px;
+      height: 260px;
+      margin: 0 auto;
+      cursor: pointer;
+      perspective: 800px;
+    }
+    .card-inner {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      transform-style: preserve-3d;
+      transition: transform 0.5s;
+    }
+    #card.flipped .card-inner {
+      transform: rotateY(180deg);
+    }
+    .card-face {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      backface-visibility: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid #ccc;
+      border-radius: 8px;
+      font-size: 1.5rem;
+      background: #fff;
+    }
+    .card-back {
+      transform: rotateY(180deg);
+      background: #e0f7fa;
     }
   </style>
 </head>
 <body>
   <header>
-    <button id="btnGrid">Times Table</button>
-    <button id="btnQuiz">Quiz Mode</button>
+    <button id="btnGrid"      >Times Table</button>
+    <button id="btnSkip"      >Skip-Counting</button>
+    <button id="btnQuiz"      >Quiz Mode</button>
+    <button id="btnFlashcards">Flashcards</button>
   </header>
 
   <!-- TIMES TABLE GRID -->
   <div class="grid" id="grid"></div>
+
+  <!-- SKIP-COUNTING GRID -->
+  <div class="grid" id="skipGrid" style="display:none;"></div>
 
   <!-- QUIZ MODE -->
   <div id="quiz" style="display:none;">
@@ -77,99 +124,161 @@
     </p>
   </div>
 
-  <script>
-    // Elements
-    const grid       = document.getElementById('grid');
-    const quiz       = document.getElementById('quiz');
-    const qText      = document.getElementById('question');
-    const choicesDiv = document.getElementById('choices');
-    const scoreSpan  = document.getElementById('score');
-    const totalSpan  = document.getElementById('total');
-    const bestSpan   = document.getElementById('best');
-    const btnGrid    = document.getElementById('btnGrid');
-    const btnQuiz    = document.getElementById('btnQuiz');
+  <!-- FLASHCARDS (single card) -->
+  <div id="cards">
+    <div id="card">
+      <div class="card-inner">
+        <div class="card-face card-front" id="cardFront"></div>
+        <div class="card-face card-back"  id="cardBack"></div>
+      </div>
+    </div>
+  </div>
 
-    // Build the 9×9 times table grid
+  <script>
+    // Element refs
+    const grid     = document.getElementById('grid');
+    const skipG    = document.getElementById('skipGrid');
+    const quiz     = document.getElementById('quiz');
+    const cardsDiv = document.getElementById('cards');
+
+    const qText   = document.getElementById('question');
+    const choices = document.getElementById('choices');
+    const scoreEl = document.getElementById('score');
+    const totalEl = document.getElementById('total');
+    const bestEl  = document.getElementById('best');
+
+    const btnGrid  = document.getElementById('btnGrid');
+    const btnSkip  = document.getElementById('btnSkip');
+    const btnQuiz  = document.getElementById('btnQuiz');
+    const btnCards = document.getElementById('btnFlashcards');
+
+    // 1) Build Times Table
     function buildGrid() {
       grid.innerHTML = '';
       for (let i = 1; i <= 9; i++) {
         for (let j = 1; j <= 9; j++) {
-          const cell = document.createElement('div');
-          cell.className = 'cell';
-          cell.dataset.text = `${i}×${j}`;
-          cell.dataset.answer = i * j;
-          cell.textContent = cell.dataset.text;
-          cell.addEventListener('pointerdown', () => cell.textContent = cell.dataset.answer);
-          cell.addEventListener('pointerup',   () => cell.textContent = cell.dataset.text);
-          cell.addEventListener('pointerleave', () => cell.textContent = cell.dataset.text);
-          grid.appendChild(cell);
+          const c = document.createElement('div');
+          c.className = 'cell';
+          c.dataset.text = `${i}×${j}`;
+          c.dataset.answer = i * j;
+          c.textContent = c.dataset.text;
+          c.addEventListener('pointerdown', () => c.textContent = c.dataset.answer);
+          c.addEventListener('pointerup',   () => c.textContent = c.dataset.text);
+          c.addEventListener('pointerleave',() => c.textContent = c.dataset.text);
+          grid.appendChild(c);
         }
       }
     }
 
-    // Quiz state
+    // 2) Build Skip-Counting (always show product)
+    function buildSkip() {
+      skipG.innerHTML = '';
+      for (let i = 1; i <= 9; i++) {
+        for (let j = 1; j <= 9; j++) {
+          const c = document.createElement('div');
+          c.className = 'cell';
+          c.textContent = `${i}×${j} = ${i*j}`;
+          skipG.appendChild(c);
+        }
+      }
+    }
+
+    // 3) Quiz State & Functions
     let correct = 0, total = 0;
     let bestPct = parseInt(localStorage.getItem('bestPct')) || 0;
 
     function saveBest() {
-      const pct = total ? Math.round(correct / total * 100) : 0;
+      const pct = total ? Math.round(correct/total*100) : 0;
       if (pct > bestPct) {
         bestPct = pct;
         localStorage.setItem('bestPct', bestPct);
       }
     }
-
-    function updateScoreDisplay() {
-      scoreSpan.textContent = correct;
-      totalSpan.textContent = total;
-      bestSpan.textContent = bestPct + '%';
+    function updateScore() {
+      scoreEl.textContent = correct;
+      totalEl.textContent = total;
+      bestEl.textContent  = bestPct + '%';
     }
-
-    // Generate next quiz question
     function nextQuestion() {
-      const a = 1 + Math.floor(Math.random() * 9);
-      const b = 1 + Math.floor(Math.random() * 9);
-      const ans = a * b;
-      qText.textContent = `What is ${a} × ${b}?`;
+      const a = 1 + Math.floor(Math.random()*9);
+      const b = 1 + Math.floor(Math.random()*9);
+      const ans = a*b;
+      qText.textContent = `What is ${a}×${b}?`;
 
-      // Build 4 choices (1 correct + 3 wrong)
       const opts = new Set([ans]);
       while (opts.size < 4) {
-        const wrong = (1 + Math.floor(Math.random() * 9)) * (1 + Math.floor(Math.random() * 9));
-        opts.add(wrong);
+        opts.add(
+          (1 + Math.floor(Math.random()*9)) *
+          (1 + Math.floor(Math.random()*9))
+        );
       }
-
-      choicesDiv.innerHTML = '';
-      Array.from(opts)
-        .sort(() => Math.random() - 0.5)
-        .forEach(val => {
-          const btn = document.createElement('button');
-          btn.textContent = val;
-          btn.onclick = () => {
-            total++;
-            if (val === ans) correct++;
-            saveBest();
-            updateScoreDisplay();
-            nextQuestion();
-          };
-          choicesDiv.appendChild(btn);
-        });
+      choices.innerHTML = '';
+      Array.from(opts).sort(() => Math.random()-0.5).forEach(val => {
+        const btn = document.createElement('button');
+        btn.textContent = val;
+        btn.onclick = () => {
+          total++;
+          if (val === ans) correct++;
+          saveBest();
+          updateScore();
+          nextQuestion();
+        };
+        choices.appendChild(btn);
+      });
     }
 
-    // Toggle between modes
-    btnGrid.onclick = () => {
-      grid.style.display = '';
-      quiz.style.display = 'none';
-    };
-    btnQuiz.onclick = () => {
-      grid.style.display = 'none';
-      quiz.style.display = '';
-      nextQuestion();
+    // 4) Flashcards — one at a time, shuffled, auto-advance
+    let deck = [], currentIndex = 0;
+    const cardEl   = document.getElementById('card');
+    const frontEl  = document.getElementById('cardFront');
+    const backEl   = document.getElementById('cardBack');
+
+    function initDeck() {
+      deck = [];
+      for (let i = 0; i <= 12; i++) {
+        for (let j = 1; j <= 12; j++) {
+          deck.push({ front: `${i}×${j}`, back: `${i*j}` });
+        }
+      }
+      deck.sort(() => Math.random() - 0.5);
+      currentIndex = 0;
+    }
+
+    function showNextCard() {
+      if (currentIndex >= deck.length) initDeck();
+      const { front, back } = deck[currentIndex++];
+      cardEl.classList.remove('flipped');
+      frontEl.textContent = front;
+      backEl.textContent  = back;
+    }
+
+    btnCards.onclick = () => {
+      showMode('cards');
+      initDeck();
+      showNextCard();
+      cardEl.onclick = () => {
+        if (!cardEl.classList.contains('flipped')) {
+          cardEl.classList.add('flipped');
+          setTimeout(showNextCard, 1500);
+        }
+      };
     };
 
-    // Initialize
+    // Mode switch helper
+    function showMode(mode) {
+      grid.style.display     = mode==='grid'  ? '' : 'none';
+      skipG.style.display    = mode==='skip'  ? '' : 'none';
+      quiz.style.display     = mode==='quiz'  ? '' : 'none';
+      cardsDiv.style.display = mode==='cards'? '' : 'none';
+    }
+
+    // Button handlers
+    btnGrid.onclick =  () => { showMode('grid'); };
+    btnSkip.onclick =  () => { showMode('skip'); buildSkip(); };
+    btnQuiz.onclick =  () => { showMode('quiz'); updateScore(); nextQuestion(); };
+
+    // Init on load
     buildGrid();
-    updateScoreDisplay();
   </script>
 </body>
 </html>
